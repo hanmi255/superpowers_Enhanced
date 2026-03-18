@@ -96,7 +96,7 @@ gemini extensions update superpowers
 
 ### Windsurf
 
-Windsurf discovers skills from `~/.agents/skills/`.
+Windsurf discovers workspace skills from `.windsurf/skills/`.
 
 Install by running:
 
@@ -104,7 +104,13 @@ Install by running:
 npx superpowers-enhanced@latest
 ```
 
-If you already have an existing `~/.agents/skills/superpowers`, re-run with `--force`:
+To install globally (all projects), use `--global`:
+
+```bash
+npx superpowers-enhanced@latest -- --global
+```
+
+If you already have an existing `.windsurf/skills/<skill-name>`, re-run with `--force`:
 
 ```bash
 npx superpowers-enhanced@latest -- --force

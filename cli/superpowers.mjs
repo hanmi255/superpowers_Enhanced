@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs/promises';
-import fssync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -16,11 +15,16 @@ function usage(exitCode = 0) {
 
 Usage:
   superpowers-enhanced
-  superpowers install windsurf [--force]
+  superpowers install windsurf [--workspace|--global] [--force]
 
 What it does:
-  Installs Superpowers skills for Windsurf by linking this package's ./skills
-  directory into ~/.agents/skills/superpowers (cross-agent skill discovery).
+  Installs Superpowers skills for Windsurf.
+
+  By default it installs into the current workspace:
+    .windsurf/skills/
+
+  Use --global to install into your user config:
+    ~/.codeium/windsurf/skills/
 `;
   process.stdout.write(msg);
   process.exit(exitCode);
@@ -65,7 +69,31 @@ async function removeExistingLinkIfForce(linkPath, force) {
   await fs.rm(linkPath, { recursive: true, force: true });
 }
 
-async function installWindsurf({ force }) {
+function getWindsurfGlobalConfigDir() {
+  if (process.env.WINDSURF_CONFIG_DIR) return process.env.WINDSURF_CONFIG_DIR;
+  return path.join(os.homedir(), '.codeium', 'windsurf');
+}
+
+async function listSkillDirectories(skillsRoot) {
+  const entries = await fs.readdir(skillsRoot, { withFileTypes: true });
+  return entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+async function linkDir({ sourceDir, targetDir }) {
+  if (process.platform === 'win32') {
+    // Use a junction to avoid needing developer mode/admin.
+    // mklink /J <link> <target>
+    runOrThrow('cmd', ['/c', 'mklink', '/J', targetDir, sourceDir], { shell: false });
+  } else {
+    // ln -s <target> <link>
+    runOrThrow('ln', ['-s', sourceDir, targetDir], { shell: false });
+  }
+}
+
+async function installWindsurf({ force, scope }) {
   const packageRoot = path.resolve(__dirname, '..');
   const sourceSkills = path.join(packageRoot, 'skills');
 
@@ -73,32 +101,40 @@ async function installWindsurf({ force }) {
     throw new Error(`Expected skills directory not found: ${sourceSkills}`);
   }
 
-  const home = os.homedir();
-  const agentsSkillsDir = path.join(home, '.agents', 'skills');
-  const linkPath = path.join(agentsSkillsDir, 'superpowers');
-
-  await ensureDir(agentsSkillsDir);
-
-  if (await pathExists(linkPath)) {
-    if (!force) {
-      process.stderr.write(
-        `superpowers: ${linkPath} already exists. Re-run with --force to replace it.\n`
-      );
-      process.exit(1);
-    }
-    await removeExistingLinkIfForce(linkPath, force);
-  }
-
-  if (process.platform === 'win32') {
-    // Use a junction to avoid needing developer mode/admin.
-    // mklink /J <link> <target>
-    runOrThrow('cmd', ['/c', 'mklink', '/J', linkPath, sourceSkills], { shell: false });
+  let targetSkillsDir;
+  if (scope === 'global') {
+    const configDir = getWindsurfGlobalConfigDir();
+    targetSkillsDir = path.join(configDir, 'skills');
   } else {
-    // ln -s <target> <link>
-    runOrThrow('ln', ['-s', sourceSkills, linkPath], { shell: false });
+    // workspace
+    targetSkillsDir = path.join(process.cwd(), '.windsurf', 'skills');
   }
 
-  process.stdout.write(`Installed Windsurf skills link:\n  ${linkPath} -> ${sourceSkills}\n`);
+  await ensureDir(targetSkillsDir);
+
+  const skillNames = await listSkillDirectories(sourceSkills);
+  if (skillNames.length === 0) {
+    throw new Error(`No skills found in: ${sourceSkills}`);
+  }
+
+  for (const name of skillNames) {
+    const sourceDir = path.join(sourceSkills, name);
+    const targetDir = path.join(targetSkillsDir, name);
+
+    if (await pathExists(targetDir)) {
+      if (!force) {
+        process.stderr.write(
+          `superpowers: ${targetDir} already exists. Re-run with --force to replace it.\n`
+        );
+        process.exit(1);
+      }
+      await removeExistingLinkIfForce(targetDir, force);
+    }
+
+    await linkDir({ sourceDir, targetDir });
+  }
+
+  process.stdout.write(`Installed Windsurf skills into:\n  ${targetSkillsDir}\n`);
   process.stdout.write('Restart Windsurf (or reload the window) to discover the skills.\n');
 }
 
@@ -108,16 +144,24 @@ async function main() {
 
   const force = flags.has('--force');
 
+  const hasGlobal = flags.has('--global');
+  const hasWorkspace = flags.has('--workspace');
+  if (hasGlobal && hasWorkspace) {
+    process.stderr.write('superpowers: --global and --workspace are mutually exclusive\n');
+    process.exit(1);
+  }
+  const scope = hasGlobal ? 'global' : 'workspace';
+
   // Default behavior: npx superpowers-enhanced@latest
   if (positionals.length === 0) {
-    await installWindsurf({ force });
+    await installWindsurf({ force, scope });
     return;
   }
 
   const [cmd, platform] = positionals;
 
   if (cmd === 'install' && platform === 'windsurf') {
-    await installWindsurf({ force });
+    await installWindsurf({ force, scope });
     return;
   }
 
