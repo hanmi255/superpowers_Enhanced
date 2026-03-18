@@ -15,7 +15,7 @@ function usage(exitCode = 0) {
 
 Usage:
   superpowers-enhanced
-  superpowers install windsurf [--workspace|--global] [--force]
+  superpowers install windsurf [--workspace|--global] [--force] [--copy|--link]
 
 What it does:
   Installs Superpowers skills for Windsurf.
@@ -25,6 +25,10 @@ What it does:
 
   Use --global to install into your user config:
     ~/.codeium/windsurf/skills/
+
+  Install mode:
+    --copy  Copy skills into the target directory (default on Windows)
+    --link  Link skills into the target directory (default on non-Windows)
 `;
   process.stdout.write(msg);
   process.exit(exitCode);
@@ -82,6 +86,26 @@ async function listSkillDirectories(skillsRoot) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+async function copyDir({ sourceDir, targetDir }) {
+  // Prefer built-in recursive copy when available.
+  if (typeof fs.cp === 'function') {
+    await fs.cp(sourceDir, targetDir, { recursive: true });
+    return;
+  }
+
+  await fs.mkdir(targetDir, { recursive: true });
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const src = path.join(sourceDir, entry.name);
+    const dst = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir({ sourceDir: src, targetDir: dst });
+    } else if (entry.isFile()) {
+      await fs.copyFile(src, dst);
+    }
+  }
+}
+
 async function linkDir({ sourceDir, targetDir }) {
   if (process.platform === 'win32') {
     // Use a junction to avoid needing developer mode/admin.
@@ -93,7 +117,7 @@ async function linkDir({ sourceDir, targetDir }) {
   }
 }
 
-async function installWindsurf({ force, scope }) {
+async function installWindsurf({ force, scope, mode }) {
   const packageRoot = path.resolve(__dirname, '..');
   const sourceSkills = path.join(packageRoot, 'skills');
 
@@ -131,7 +155,11 @@ async function installWindsurf({ force, scope }) {
       await removeExistingLinkIfForce(targetDir, force);
     }
 
-    await linkDir({ sourceDir, targetDir });
+    if (mode === 'copy') {
+      await copyDir({ sourceDir, targetDir });
+    } else {
+      await linkDir({ sourceDir, targetDir });
+    }
   }
 
   process.stdout.write(`Installed Windsurf skills into:\n  ${targetSkillsDir}\n`);
@@ -152,16 +180,24 @@ async function main() {
   }
   const scope = hasGlobal ? 'global' : 'workspace';
 
+  const hasCopy = flags.has('--copy');
+  const hasLink = flags.has('--link');
+  if (hasCopy && hasLink) {
+    process.stderr.write('superpowers: --copy and --link are mutually exclusive\n');
+    process.exit(1);
+  }
+  const mode = hasCopy ? 'copy' : hasLink ? 'link' : process.platform === 'win32' ? 'copy' : 'link';
+
   // Default behavior: npx superpowers-enhanced@latest
   if (positionals.length === 0) {
-    await installWindsurf({ force, scope });
+    await installWindsurf({ force, scope, mode });
     return;
   }
 
   const [cmd, platform] = positionals;
 
   if (cmd === 'install' && platform === 'windsurf') {
-    await installWindsurf({ force, scope });
+    await installWindsurf({ force, scope, mode });
     return;
   }
 
