@@ -1,6 +1,29 @@
 {
-  "name": "superpowers",
-  "version": "5.0.4",
+  "name": "superpowers-enhanced",
+  "version": "1.0.0",
   "type": "module",
-  "main": ".opencode/plugins/superpowers.js"
+  "license": "MIT",
+  "description": "Superpowers skills installer (Enhanced) with Windsurf support",
+  "main": ".opencode/plugins/superpowers.js",
+  "bin": {
+    "superpowers-enhanced": "./cli/superpowers.mjs",
+    "superpowers": "./cli/superpowers.mjs"
+  },
+  "files": [
+    "cli/",
+    "skills/",
+    "agents/",
+    "commands/",
+    "hooks/",
+    ".cursor-plugin/",
+    ".claude-plugin/",
+    ".opencode/",
+    ".codex/",
+    "GEMINI.md",
+    "gemini-extension.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "RELEASE-NOTES.md"
+  ]
 }

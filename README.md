@@ -94,6 +94,22 @@ To update:
 gemini extensions update superpowers
 ```
 
+### Windsurf
+
+Windsurf discovers skills from `~/.agents/skills/`.
+
+Install by running:
+
+```bash
+npx superpowers-enhanced@latest
+```
+
+If you already have an existing `~/.agents/skills/superpowers`, re-run with `--force`:
+
+```bash
+npx superpowers-enhanced@latest -- --force
+```
+
 ### Verify Installation
 
 Start a new session in your chosen platform and ask for something that should trigger a skill (for example, "help me plan this feature" or "let's debug this issue"). The agent should automatically invoke the relevant superpowers skill.
